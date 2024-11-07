@@ -20,15 +20,15 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
+      run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
     - name: Build and Pack Prerelease
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease
 
     - name: Publish Prerelease to NuGet
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+      run: dotnet nuget push EFCore.MockBuilder/EFCore.MockBuilder/bin/Release/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
 
   # Step 2: Production Release (manual approval required)
   release:
