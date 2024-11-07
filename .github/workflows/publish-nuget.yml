@@ -48,6 +48,9 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
+    - name: Confirm file path
+      run: ls -R
+
     - name: Restore dependencies
       run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
