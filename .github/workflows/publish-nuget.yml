@@ -23,7 +23,7 @@ jobs:
       run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
     - name: Build and Pack Prerelease
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}
 
     - name: Publish Prerelease to NuGet
       env:
