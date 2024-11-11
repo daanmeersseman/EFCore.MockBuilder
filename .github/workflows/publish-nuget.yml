@@ -57,7 +57,10 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
-    - name: Build and Pack Production Release
+    - name: Build
+      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release 
+   
+    - name: Pack Prerelease
       run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}
 
     - name: Publish Production Release to NuGet
