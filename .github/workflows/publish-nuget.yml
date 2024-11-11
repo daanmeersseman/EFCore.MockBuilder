@@ -2,13 +2,11 @@ name: Publish NuGet Package
 
 on:
   release:
-    types: [published]   
+    types: [published]   # Triggers the workflow whenever a release is published on GitHub
 
 jobs:
-  # Step 1: Prerelease Publication
-  prerelease:
+  publish:
     runs-on: ubuntu-latest
-    if: ${{ github.event.release.prerelease }}  
 
     steps:
     - name: Checkout code
@@ -19,50 +17,37 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
-    - name: Confirm file path
-      run: ls -R
-   
-    - name: Restore dependencies
-      run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
-
-    - name: Build
-      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release 
-   
-    - name: Pack Prerelease
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease /p:IncludeSymbols=true
-
-    - name: Publish Prerelease to NuGet
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
-
-  # Step 2: Production Release (manual approval required)
-  release:
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.release.prerelease }}
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
-
-    - name: Confirm file path
-      run: ls -R
+    - name: Clean Build Output
+      run: dotnet clean EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release
 
     - name: Restore dependencies
       run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
     - name: Build
-      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release 
-   
-    - name: Pack Release
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }} /p:IncludeSymbols=true
+      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release
 
-    - name: Publish Production Release to NuGet
+    - name: Pack NuGet Package
+      run: |
+        # Check if this is a prerelease
+        if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+          # Append prerelease suffix to the version
+          dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj \
+            --configuration Release \
+            --no-build \
+            /p:PackageVersion=${{ github.event.release.tag_name }}-beta
+        else
+          dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj \
+            --configuration Release \
+            --no-build \
+            /p:PackageVersion=${{ github.event.release.tag_name }}
+        fi
+
+    - name: List Packed Files
+      run: ls EFCore.MockBuilder/bin/Release/
+
+    - name: Publish to NuGet
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg \
+        --api-key $NUGET_API_KEY \
+        --source https://api.nuget.org/v3/index.json
