@@ -2,7 +2,7 @@ name: Publish NuGet Package
 
 on:
   release:
-    types: [published]   # Triggers the workflow whenever a release is published on GitHub
+    types: [published]
 
 jobs:
   publish:
@@ -28,9 +28,7 @@ jobs:
 
     - name: Pack NuGet Package
       run: |
-        # Check if this is a prerelease
         if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-          # Append prerelease suffix to the version
           dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj \
             --configuration Release \
             --no-build \
@@ -46,10 +44,6 @@ jobs:
       run: ls EFCore.MockBuilder/bin/Release/
 
     - name: Publish to NuGet
-      shell: bash
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      run: |
-        dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg \
-          --api-key $NUGET_API_KEY \
-          --source https://api.nuget.org/v3/index.json
+      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json
