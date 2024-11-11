@@ -39,7 +39,6 @@ jobs:
   # Step 2: Production Release (manual approval required)
   release:
     runs-on: ubuntu-latest
-    needs: prerelease   # Run only after the prerelease job finishes
     if: ${{ !github.event.release.prerelease }}  # Run only if the release is NOT marked as a pre-release
 
     steps:
