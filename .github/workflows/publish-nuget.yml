@@ -2,13 +2,13 @@ name: Publish NuGet Package
 
 on:
   release:
-    types: [published]   # Triggers the workflow whenever a release is published on GitHub
+    types: [published]   
 
 jobs:
   # Step 1: Prerelease Publication
   prerelease:
     runs-on: ubuntu-latest
-    if: ${{ github.event.release.prerelease }}  # Run only if the release is marked as a pre-release
+    if: ${{ github.event.release.prerelease }}  
 
     steps:
     - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
       run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release 
    
     - name: Pack Prerelease
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}-prerelease /p:IncludeSymbols=true
 
     - name: Publish Prerelease to NuGet
       env:
@@ -39,7 +39,7 @@ jobs:
   # Step 2: Production Release (manual approval required)
   release:
     runs-on: ubuntu-latest
-    if: ${{ !github.event.release.prerelease }}  # Run only if the release is NOT marked as a pre-release
+    if: ${{ !github.event.release.prerelease }}
 
     steps:
     - name: Checkout code
@@ -59,8 +59,8 @@ jobs:
     - name: Build
       run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release 
    
-    - name: Pack Prerelease
-      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }}
+    - name: Pack Release
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:PackageVersion=${{ github.event.release.tag_name }} /p:IncludeSymbols=true
 
     - name: Publish Production Release to NuGet
       env:
