@@ -46,8 +46,10 @@ jobs:
       run: ls EFCore.MockBuilder/bin/Release/
 
     - name: Publish to NuGet
+      shell: bash
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      run: dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg \
-        --api-key $NUGET_API_KEY \
-        --source https://api.nuget.org/v3/index.json
+      run: |
+        dotnet nuget push EFCore.MockBuilder/bin/Release/*.nupkg \
+          --api-key $NUGET_API_KEY \
+          --source https://api.nuget.org/v3/index.json
