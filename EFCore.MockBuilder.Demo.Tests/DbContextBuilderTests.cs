@@ -196,7 +196,7 @@ namespace EFCore.MockBuilder.Demo.Tests
                 .With(u => u.Username = "multiorderuser");
 
             // Add multiple Orders related to the User
-            for (int i = 0; i 3; i++)
+            for (int i = 0; i < 3; i++)
             {
                 userBuilder.AddRelated<Order>()
                     .With(o => o.TotalAmount = (i + 1) * 100);
