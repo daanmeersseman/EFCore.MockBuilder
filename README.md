@@ -55,13 +55,13 @@ using EFCore.MockBuilder;
 using Microsoft.EntityFrameworkCore;
 
 // Create an in-memory DbContext for testing
-var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+var options = new DbContextOptionsBuilder<DbContext>()
     .UseInMemoryDatabase("TestDatabase")
     .Options;
-var context = new ApplicationDbContext(options);
+var context = new DbContext(options);
 
 // Initialize DbContextBuilder
-var builder = new DbContextBuilder<ApplicationDbContext>(context);
+var builder = new DbContextBuilder<DbContext>(context);
 ```
 
 ---

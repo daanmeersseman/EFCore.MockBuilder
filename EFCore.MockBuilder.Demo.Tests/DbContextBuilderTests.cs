@@ -1,4 +1,7 @@
-﻿using EFCore.MockBuilder.Demo.Models;
+﻿using System;
+using System.Linq;
+using EFCore.MockBuilder;
+using EFCore.MockBuilder.Demo.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -161,7 +164,7 @@ namespace EFCore.MockBuilder.Demo.Tests
                 .With(u => u.Username = "existinguser");
 
             // Add an Order separately
-            builder.Add<Order>()
+            var orderBuilder = builder.Add<Order>()
                 .With(o => o.TotalAmount = 300);
 
             var dbContext = builder.Build();
@@ -281,16 +284,178 @@ namespace EFCore.MockBuilder.Demo.Tests
             userBuilder.AddRelated<Order>()
                 .With(o => o.TotalAmount = 200);
 
+            // Add a second user and order to ensure data remains after deletion
+            var secondUserBuilder = builder.Add<User>()
+                .With(u => u.Username = "seconduser");
+
+            secondUserBuilder.AddRelated<Order>()
+                .With(o => o.TotalAmount = 250);
+
             var dbContext = builder.Build();
 
             // Delete the user
-            var user = dbContext.Users.First();
+            var user = dbContext.Users.First(u => u.Username == "cascadeuser");
             dbContext.Users.Remove(user);
             dbContext.SaveChanges();
 
             // Assert
-            Assert.Empty(dbContext.Users);
-            Assert.Empty(dbContext.Orders);
+            Assert.DoesNotContain(dbContext.Users, u => u.Username == "cascadeuser");
+            Assert.DoesNotContain(dbContext.Orders, o => o.UserId == user.Id);
+
+            Assert.NotEmpty(dbContext.Users); // Should contain 'seconduser'
+            Assert.NotEmpty(dbContext.Orders); // Should contain orders related to 'seconduser'
+        }
+
+        /// <summary>
+        /// 11. Adding AllDataTypesEntity with Dummy Data
+        /// </summary>
+        [Fact]
+        public void AddAllDataTypesEntity_WithDummyData_ShouldSetAllPropertiesCorrectly()
+        {
+            // Arrange
+            var context = CreateInMemoryContext();
+            var builder = new DbContextBuilder<DbContext>(context);
+
+            // Act
+         var x=    builder.Add<AllDataTypesEntity>(1); // Adds one entity with dummy data
+            var dbContext = builder.Build();
+
+            // Assert
+            var entity = dbContext.AllDataTypesEntities.First();
+
+            // Numeric Types
+            Assert.NotEqual(default(byte), entity.ByteValue);
+            Assert.NotEqual(default(short), entity.ShortValue);
+            Assert.NotEqual(default(int), entity.IntValue);
+            Assert.NotEqual(default(long), entity.LongValue);
+            Assert.NotEqual(default(float), entity.FloatValue);
+            Assert.NotEqual(default(double), entity.DoubleValue);
+            Assert.NotEqual(default(decimal), entity.DecimalValue);
+
+            // Text Types
+            Assert.False(string.IsNullOrEmpty(entity.RequiredString));
+            Assert.True(entity.MaxLengthString.Length <= 50);
+            Assert.True(entity.MinLengthString.Length >= 5);
+            Assert.InRange(entity.StringLengthString.Length, 10, 100);
+
+            // Date and Time Types
+            Assert.NotEqual(default(DateTime), entity.DateTimeValue);
+            Assert.NotEqual(default(TimeSpan), entity.TimeSpanValue);
+            Assert.NotEqual(default(DateTimeOffset), entity.DateTimeOffsetValue);
+
+            // Other Types
+            Assert.NotEqual(default(bool), entity.BoolValue);
+            Assert.NotEqual(default(Guid), entity.GuidValue);
+
+            // Binary Type
+            Assert.NotNull(entity.ByteArrayValue);
+            Assert.NotEmpty(entity.ByteArrayValue);
+
+            // Enum Type
+            Assert.IsType<SampleEnum>(entity.EnumValue);
+            Assert.True(Enum.IsDefined(typeof(SampleEnum), entity.EnumValue));
+
+            // Data Annotations
+            Assert.InRange(entity.RangeInt, 1, 100);
+            Assert.False(string.IsNullOrEmpty(entity.EmailAddress));
+            Assert.False(string.IsNullOrEmpty(entity.PhoneNumber));
+            Assert.False(string.IsNullOrEmpty(entity.Url));
+        }
+
+        /// <summary>
+        /// 12. Customizing AllDataTypesEntity Properties
+        /// </summary>
+        [Fact]
+        public void AddAllDataTypesEntity_WithCustomProperties_ShouldSetPropertiesCorrectly()
+        {
+            // Arrange
+            var context = CreateInMemoryContext();
+            var builder = new DbContextBuilder<DbContext>(context);
+
+            // Act
+            var guidValue = Guid.NewGuid();
+            var byteArrayValue = new byte[] { 1, 2, 3 };
+
+            builder.Add<AllDataTypesEntity>()
+                .With(entity =>
+                {
+                    // Numeric Types
+                    entity.ByteValue = 200;
+                    entity.ShortValue = 30000;
+                    entity.IntValue = 100000;
+                    entity.LongValue = 5000000000L;
+                    entity.FloatValue = 123.45f;
+                    entity.DoubleValue = 6789.01;
+                    entity.DecimalValue = 23456.78m;
+
+                    // Text Types
+                    entity.RequiredString = "RequiredValue";
+                    entity.MaxLengthString = "MaxLengthString";
+                    entity.MinLengthString = "MinLen";
+                    entity.StringLengthString = "StringLengthValue";
+
+                    // Date and Time Types
+                    entity.DateTimeValue = new DateTime(2020, 1, 1);
+                    entity.TimeSpanValue = new TimeSpan(1, 2, 3);
+                    entity.DateTimeOffsetValue = new DateTimeOffset(2020, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+                    // Other Types
+                    entity.BoolValue = true;
+                    entity.GuidValue = guidValue;
+
+                    // Binary Type
+                    entity.ByteArrayValue = byteArrayValue;
+
+                    // Enum Type
+                    entity.EnumValue = SampleEnum.Value2;
+
+                    // Data Annotations
+                    entity.RangeInt = 50;
+                    entity.EmailAddress = "test@example.com";
+                    entity.PhoneNumber = "123-456-7890";
+                    entity.Url = "https://www.example.com";
+                });
+
+            var dbContext = builder.Build();
+
+            // Assert
+            var entity = dbContext.AllDataTypesEntities.First();
+
+            // Numeric Types
+            Assert.Equal<byte>(200, entity.ByteValue);
+            Assert.Equal<short>(30000, entity.ShortValue);
+            Assert.Equal(100000, entity.IntValue);
+            Assert.Equal(5000000000L, entity.LongValue);
+            Assert.Equal(123.45f, entity.FloatValue, 2);
+            Assert.Equal(6789.01, entity.DoubleValue, 2);
+            Assert.Equal(23456.78m, entity.DecimalValue);
+
+            // Text Types
+            Assert.Equal<string>("RequiredValue", entity.RequiredString);
+            Assert.Equal<string>("MaxLengthString", entity.MaxLengthString);
+            Assert.Equal<string>("MinLen", entity.MinLengthString);
+            Assert.Equal<string>("StringLengthValue", entity.StringLengthString);
+
+            // Date and Time Types
+            Assert.Equal(new DateTime(2020, 1, 1), entity.DateTimeValue);
+            Assert.Equal(new TimeSpan(1, 2, 3), entity.TimeSpanValue);
+            Assert.Equal(new DateTimeOffset(2020, 1, 1, 12, 0, 0, TimeSpan.Zero), entity.DateTimeOffsetValue);
+
+            // Other Types
+            Assert.True(entity.BoolValue);
+            Assert.Equal(guidValue, entity.GuidValue);
+
+            // Binary Type
+            Assert.True(byteArrayValue.SequenceEqual(entity.ByteArrayValue));
+
+            // Enum Type
+            Assert.Equal(SampleEnum.Value2, entity.EnumValue);
+
+            // Data Annotations
+            Assert.Equal(50, entity.RangeInt);
+            Assert.Equal<string>("test@example.com", entity.EmailAddress);
+            Assert.Equal<string>("123-456-7890", entity.PhoneNumber);
+            Assert.Equal<string>("https://www.example.com", entity.Url);
         }
     }
 }

@@ -6,6 +6,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<Authors>Daan Meersseman</Authors>
+		<Description>Fluent API to mock EF Core entities. Covering data annotations, foreign keys, ...</Description>
 		<PackageTags>EntityFrameworkCore;UnitTesting;DbContext;Mocking</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/daanmeersseman/EFCore.MockBuilder</PackageProjectUrl>
@@ -13,6 +14,7 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PackageIcon>Assets/icon.png</PackageIcon>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -27,6 +29,7 @@
 
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<None Include="Assets/icon.png" Pack="true" PackagePath="Assets/" />
 	</ItemGroup>
 
 </Project>
