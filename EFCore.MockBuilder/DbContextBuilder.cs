@@ -1,274 +1,415 @@
-﻿using System.Linq.Expressions;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
+using Bogus;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace EFCore.MockBuilder
 {
-    /// <summary>
-    /// Builds a mocked DbContext with entities and relationships for unit testing.
-    /// </summary>
-    /// <typeparam name="TContext">The type of the DbContext.</typeparam>
-    public class DbContextBuilder<TContext>(TContext context)
-        where TContext : DbContext
+    public class DbContextBuilder<TContext> where TContext : DbContext
     {
-        internal TContext Context { get; } = context ?? throw new ArgumentNullException(nameof(context), "DbContext cannot be null.");
+        private readonly TContext _context;
+        private readonly Dictionary<Type, object> _customGenerators = new Dictionary<Type, object>();
 
-        private readonly Dictionary<Type, long> _primaryKeyCounters = new();
-
-        /// <summary>
-        /// Adds entities with dummy data to the DbContext.
-        /// </summary>
-        public EntityBuilder<TEntity, TContext> Add<TEntity>(int count = 1)
-            where TEntity : class, new()
+        public DbContextBuilder(TContext context)
         {
-            TEntity entity = null!;
-
-            for (int i = 0; i < count; i++)
-            {
-                entity = GenerateEntityWithDummyData<TEntity>();
-                SetPrimaryKey(entity);
-                Context.Set<TEntity>().Add(entity);
-            }
-
-            return new EntityBuilder<TEntity, TContext>(entity, this);
+            _context = context;
         }
 
-        /// <summary>
-        /// Saves all changes to the DbContext.
-        /// </summary>
+        public EntityBuilder<TEntity> Add<TEntity>() where TEntity : class, new()
+        {
+            var faker = CreateFaker<TEntity>();
+            var entity = faker.Generate();
+
+            _context.Set<TEntity>().Add(entity);
+
+            return new EntityBuilder<TEntity>(this, entity);
+        }
+
+        public EntityBuilder<TEntity>[] Add<TEntity>(int count) where TEntity : class, new()
+        {
+            var faker = CreateFaker<TEntity>();
+            var entities = faker.Generate(count);
+
+            _context.Set<TEntity>().AddRange(entities);
+
+            return entities.Select(entity => new EntityBuilder<TEntity>(this, entity)).ToArray();
+        }
+
+        public void ConfigureGenerator<TEntity>(Action<Faker<TEntity>> configure) where TEntity : class
+        {
+            _customGenerators[typeof(TEntity)] = configure;
+        }
+
         public TContext Build()
         {
-            Context.SaveChanges();
-            return Context;
+            _context.SaveChanges();
+            return _context;
         }
 
-        /// <summary>
-        /// Generates an entity with dummy data, ignoring navigation properties and respecting data annotations.
-        /// </summary>
-        internal TEntity GenerateEntityWithDummyData<TEntity>()
-            where TEntity : class, new()
+        private Faker<TEntity> CreateFaker<TEntity>() where TEntity : class, new()
         {
-            var entityType = Context.Model.FindEntityType(typeof(TEntity))
-                ?? throw new InvalidOperationException($"Entity type {typeof(TEntity).Name} not found in DbContext model.");
+            Faker<TEntity> faker;
 
-            var navigationProperties = entityType.GetNavigations().Select(n => n.Name).ToList();
-
-            var entity = EntityGenerator.Generate<TEntity>();
-
-            // Ignore navigation properties
-            foreach (var navPropName in navigationProperties)
+            if (_customGenerators.TryGetValue(typeof(TEntity), out var customGeneratorObj))
             {
-                var propertyInfo = typeof(TEntity).GetProperty(navPropName);
-                if (propertyInfo != null && propertyInfo.CanWrite)
+                var customGenerator = customGeneratorObj as Action<Faker<TEntity>>;
+                faker = new Faker<TEntity>().StrictMode(true);
+                customGenerator?.Invoke(faker);
+                return faker;
+            }
+
+            faker = new Faker<TEntity>().StrictMode(true);
+            var properties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            void IgnoreProperty(string propertyName)
+            {
+                var param = Expression.Parameter(typeof(TEntity), "e");
+                var property = Expression.PropertyOrField(param, propertyName);
+                var lambda = Expression.Lambda<Func<TEntity, object>>(Expression.Convert(property, typeof(object)), param);
+                faker.Ignore(lambda);
+            }
+
+            foreach (var prop in properties)
+            {
+                if (!prop.CanWrite)
+                    continue;
+
+                var propType = prop.PropertyType;
+                var propName = prop.Name;
+                var underlyingType = Nullable.GetUnderlyingType(propType) ?? propType;
+
+                if (IsNavigationProperty(prop))
                 {
-                    var defaultValue = propertyInfo.PropertyType.IsValueType
-                        ? Activator.CreateInstance(propertyInfo.PropertyType)
-                        : null;
-                    propertyInfo.SetValue(entity, defaultValue);
+                    IgnoreProperty(propName);
+                    continue;
+                }
+
+                if (underlyingType == typeof(string))
+                {
+                    faker.RuleFor(propName, f => f.Lorem.Word());
+
+                    var isRequired = prop.GetCustomAttribute<RequiredAttribute>() != null;
+
+                    var maxLength = prop.GetCustomAttribute<MaxLengthAttribute>()?.Length
+                        ?? prop.GetCustomAttribute<StringLengthAttribute>()?.MaximumLength;
+
+                    var minLength = prop.GetCustomAttribute<MinLengthAttribute>()?.Length
+                        ?? prop.GetCustomAttribute<StringLengthAttribute>()?.MinimumLength;
+
+                    if (maxLength.HasValue && minLength.HasValue)
+                    {
+                        faker.RuleFor(propName, f => f.Random.String2(minLength.Value, maxLength.Value));
+                    }
+                    else if (maxLength.HasValue)
+                    {
+                        faker.RuleFor(propName, f => f.Random.String2(1, maxLength.Value));
+                    }
+                    else if (minLength.HasValue)
+                    {
+                        faker.RuleFor(propName, f => f.Random.String2(minLength.Value, minLength.Value + 10));
+                    }
+
+                    if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
+                    {
+                        faker.RuleFor(propName, f => f.Internet.Email());
+                    }
+
+                    if (prop.GetCustomAttribute<UrlAttribute>() != null)
+                    {
+                        faker.RuleFor(propName, f => f.Internet.Url());
+                    }
+
+                    if (prop.GetCustomAttribute<PhoneAttribute>() != null)
+                    {
+                        faker.RuleFor(propName, f => f.Phone.PhoneNumber());
+                    }
+                }
+                else if (underlyingType == typeof(int))
+                {
+                    faker.RuleFor(propName, f => f.Random.Int());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt32(rangeAttr.Minimum);
+                        var max = Convert.ToInt32(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Int(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(double))
+                {
+                    faker.RuleFor(propName, f => f.Random.Double());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToDouble(rangeAttr.Minimum);
+                        var max = Convert.ToDouble(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Double(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(decimal))
+                {
+                    faker.RuleFor(propName, f => f.Random.Decimal());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToDecimal(rangeAttr.Minimum);
+                        var max = Convert.ToDecimal(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Decimal(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(float))
+                {
+                    faker.RuleFor(propName, f => f.Random.Float());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToSingle(rangeAttr.Minimum);
+                        var max = Convert.ToSingle(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Float(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(long))
+                {
+                    faker.RuleFor(propName, f => f.Random.Long());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt64(rangeAttr.Minimum);
+                        var max = Convert.ToInt64(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Long(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(short))
+                {
+                    faker.RuleFor(propName, f => (short)f.Random.Int(short.MinValue, short.MaxValue));
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt16(rangeAttr.Minimum);
+                        var max = Convert.ToInt16(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => (short)f.Random.Int(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(byte))
+                {
+                    faker.RuleFor(propName, f => f.Random.Byte());
+
+                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToByte(rangeAttr.Minimum);
+                        var max = Convert.ToByte(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Byte(min, max));
+                    }
+                }
+                else if (underlyingType == typeof(bool))
+                {
+                    faker.RuleFor(propName, f => f.Random.Bool());
+                }
+                else if (underlyingType == typeof(DateTime))
+                {
+                    faker.RuleFor(propName, f => f.Date.Past(20));
+                }
+                else if (underlyingType == typeof(DateTimeOffset))
+                {
+                    faker.RuleFor(propName, f => f.Date.PastOffset(20));
+                }
+                else if (underlyingType == typeof(TimeSpan))
+                {
+                    faker.RuleFor(propName, f => TimeSpan.FromMinutes(f.Random.Int(0, 1440)));
+                }
+                else if (underlyingType == typeof(Guid))
+                {
+                    faker.RuleFor(propName, f => f.Random.Guid());
+                }
+                else if (underlyingType.IsEnum)
+                {
+                    faker.RuleFor(propName, f => Enum.GetValues(underlyingType)
+                        .GetValue(f.Random.Int(0, Enum.GetValues(underlyingType).Length - 1)));
+                }
+                else if (underlyingType == typeof(byte[]))
+                {
+                    faker.RuleFor(propName, f => f.Random.Bytes(f.Random.Int(5, 20)));
+                }
+                else
+                {
+                    IgnoreProperty(propName);
                 }
             }
 
-            return entity;
+            return faker;
         }
 
-        /// <summary>
-        /// Sets unique primary key values for an entity.
-        /// </summary>
-        private void SetPrimaryKey<TEntity>(TEntity entity)
-            where TEntity : class
+        private bool IsNavigationProperty(PropertyInfo prop)
         {
-            var entityType = Context.Model.FindEntityType(typeof(TEntity))
-                ?? throw new InvalidOperationException($"Entity type {typeof(TEntity).Name} not found in DbContext model.");
+            var propType = prop.PropertyType;
+            var underlyingType = Nullable.GetUnderlyingType(propType) ?? propType;
 
-            var keyProperties = entityType.FindPrimaryKey()?.Properties
-                ?? throw new InvalidOperationException($"No primary key defined for {typeof(TEntity).Name}.");
-
-            foreach (var keyProperty in keyProperties)
+            if (typeof(IEnumerable).IsAssignableFrom(underlyingType) && underlyingType != typeof(string))
             {
-                var propertyInfo = typeof(TEntity).GetProperty(keyProperty.Name);
-                if (propertyInfo?.CanWrite == true)
+                if (!underlyingType.IsArray && underlyingType != typeof(byte[]) && underlyingType != typeof(string))
                 {
-                    var value = GenerateKeyValue(propertyInfo.PropertyType, typeof(TEntity));
-                    propertyInfo.SetValue(entity, value);
+                    return true;
                 }
             }
-        }
 
-        /// <summary>
-        /// Generates default key values based on property type.
-        /// </summary>
-        private object GenerateKeyValue(Type propertyType, Type entityType)
-        {
-            if (!_primaryKeyCounters.ContainsKey(entityType))
-                _primaryKeyCounters[entityType] = 1L;
-
-            var counterValue = _primaryKeyCounters[entityType];
-
-            object value = propertyType switch
+            if (underlyingType.IsClass && underlyingType != typeof(string) && underlyingType != typeof(byte[]))
             {
-                var t when t == typeof(int) => Convert.ToInt32(counterValue),
-                var t when t == typeof(long) => counterValue,
-                var t when t == typeof(short) => Convert.ToInt16(counterValue),
-                var t when t == typeof(byte) => Convert.ToByte(counterValue),
-                var t when t == typeof(uint) => Convert.ToUInt32(counterValue),
-                var t when t == typeof(ulong) => Convert.ToUInt64(counterValue),
-                var t when t == typeof(ushort) => Convert.ToUInt16(counterValue),
-                var t when t == typeof(sbyte) => Convert.ToSByte(counterValue),
-                var t when t == typeof(decimal) => Convert.ToDecimal(counterValue),
-                var t when t == typeof(float) => Convert.ToSingle(counterValue),
-                var t when t == typeof(double) => Convert.ToDouble(counterValue),
-                var t when t == typeof(Guid) => Guid.NewGuid(),
-                var t when t == typeof(string) => Guid.NewGuid().ToString(),
-                _ => propertyType.IsValueType ? Activator.CreateInstance(propertyType)! : null!
-            };
-
-            _primaryKeyCounters[entityType] = counterValue + 1;
-            return value;
-        }
-    }
-
-    /// <summary>
-    /// Provides methods to configure an entity and its relationships.
-    /// </summary>
-    /// <typeparam name="TEntity">The entity type.</typeparam>
-    /// <typeparam name="TContext">The DbContext type.</typeparam>
-    public class EntityBuilder<TEntity, TContext>
-        where TEntity : class
-        where TContext : DbContext
-    {
-        public TEntity Entity { get; }
-        internal DbContextBuilder<TContext> Builder { get; }
-
-        public EntityBuilder(TEntity entity, DbContextBuilder<TContext> builder)
-        {
-            Entity = entity ?? throw new ArgumentNullException(nameof(entity));
-            Builder = builder ?? throw new ArgumentNullException(nameof(builder));
-        }
-
-        /// <summary>
-        /// Configures the entity using the provided setup action.
-        /// </summary>
-        public EntityBuilder<TEntity, TContext> With(Action<TEntity> setup)
-        {
-            setup?.Invoke(Entity);
-            return this;
-        }
-
-        /// <summary>
-        /// Adds a related entity with dummy data and establishes a relationship.
-        /// </summary>
-        public EntityBuilder<TRelated, TContext> AddRelated<TRelated>(
-            Expression<Func<TEntity, object>>? mainEntityKeySelector = null,
-            Expression<Func<TRelated, object>>? relatedEntityKeySelector = null)
-            where TRelated : class, new()
-        {
-            var relatedEntity = Builder.GenerateEntityWithDummyData<TRelated>();
-            Builder.Context.Set<TRelated>().Add(relatedEntity);
-
-            RelateWith(relatedEntity, mainEntityKeySelector, relatedEntityKeySelector);
-
-            return new EntityBuilder<TRelated, TContext>(relatedEntity, Builder);
-        }
-
-        /// <summary>
-        /// Establishes a relationship with an existing entity.
-        /// </summary>
-        public EntityBuilder<TRelated, TContext> RelateWith<TRelated>(
-            TRelated relatedEntity,
-            Expression<Func<TEntity, object>>? mainEntityKeySelector = null,
-            Expression<Func<TRelated, object>>? relatedEntityKeySelector = null)
-            where TRelated : class
-        {
-            if (relatedEntity == null) throw new ArgumentNullException(nameof(relatedEntity));
-
-            var (mainKeySelector, relatedKeySelector) = GetRelationshipSelectors<TRelated>();
-
-            mainEntityKeySelector ??= mainKeySelector;
-            relatedEntityKeySelector ??= relatedKeySelector;
-
-            var mainEntityKey = mainEntityKeySelector.Compile()(Entity);
-            var relatedPropertyInfo = GetPropertyInfo(relatedEntityKeySelector);
-
-            relatedPropertyInfo?.SetValue(relatedEntity, mainEntityKey);
-
-            return new EntityBuilder<TRelated, TContext>(relatedEntity, Builder);
-        }
-
-        /// <summary>
-        /// Retrieves key selectors for establishing relationships based on the DbContext model.
-        /// </summary>
-        private (Expression<Func<TEntity, object>>, Expression<Func<TRelated, object>>) GetRelationshipSelectors<TRelated>()
-            where TRelated : class
-        {
-            var entityType = Builder.Context.Model.FindEntityType(typeof(TEntity))
-                ?? throw new InvalidOperationException($"Entity type {typeof(TEntity).Name} not found in DbContext model.");
-
-            var relatedEntityType = Builder.Context.Model.FindEntityType(typeof(TRelated))
-                ?? throw new InvalidOperationException($"Related entity type {typeof(TRelated).Name} not found in DbContext model.");
-
-            // Attempt to find a foreign key from related entity to main entity
-            var foreignKey = relatedEntityType.GetForeignKeys()
-                .FirstOrDefault(fk => fk.PrincipalEntityType == entityType);
-
-            bool isInverse = false;
-
-            // If not found, attempt to find a foreign key from main entity to related entity
-            if (foreignKey == null)
-            {
-                foreignKey = entityType.GetForeignKeys()
-                    .FirstOrDefault(fk => fk.PrincipalEntityType == relatedEntityType);
-                isInverse = true;
+                if (!IsSimpleType(underlyingType))
+                {
+                    return true;
+                }
             }
 
-            if (foreignKey == null)
-            {
-                throw new InvalidOperationException($"No foreign key relationship found between {typeof(TEntity).Name} and {typeof(TRelated).Name}.");
-            }
-
-            var principalKey = foreignKey.PrincipalKey.Properties.First();
-            var dependentKey = foreignKey.Properties.First();
-
-            if (!isInverse)
-            {
-                return (
-                    CreatePropertyExpression<TEntity>(principalKey.Name),
-                    CreatePropertyExpression<TRelated>(dependentKey.Name)
-                );
-            }
-            else
-            {
-                return (
-                    CreatePropertyExpression<TEntity>(dependentKey.Name),
-                    CreatePropertyExpression<TRelated>(principalKey.Name)
-                );
-            }
+            return false;
         }
 
-        /// <summary>
-        /// Creates a property expression for a given property name.
-        /// </summary>
-        private static Expression<Func<T, object>> CreatePropertyExpression<T>(string propertyName)
+        private bool IsSimpleType(Type type)
         {
-            var param = Expression.Parameter(typeof(T), "x");
-            var property = Expression.Property(param, propertyName);
-            var converted = Expression.Convert(property, typeof(object));
-            return Expression.Lambda<Func<T, object>>(converted, param);
+            return
+                type.IsPrimitive ||
+                type.IsEnum ||
+                new Type[]
+                {
+                    typeof(string),
+                    typeof(decimal),
+                    typeof(DateTime),
+                    typeof(DateTimeOffset),
+                    typeof(TimeSpan),
+                    typeof(Guid),
+                    typeof(byte[])
+                }.Contains(type);
         }
 
-        /// <summary>
-        /// Retrieves the PropertyInfo from a property expression.
-        /// </summary>
-        private static PropertyInfo? GetPropertyInfo<T>(Expression<Func<T, object>> expression)
+        public class EntityBuilder<TEntity> where TEntity : class
         {
-            if (expression.Body is MemberExpression memberExpr)
+            private readonly DbContextBuilder<TContext> _dbContextBuilder;
+            public TEntity Entity { get; }
+
+            public EntityBuilder(DbContextBuilder<TContext> dbContextBuilder, TEntity entity)
             {
-                return memberExpr.Member as PropertyInfo;
+                _dbContextBuilder = dbContextBuilder;
+                Entity = entity;
             }
-            if (expression.Body is UnaryExpression unaryExpr && unaryExpr.Operand is MemberExpression operandExpr)
+
+            public EntityBuilder<TEntity> With(Action<TEntity> configureEntity)
             {
-                return operandExpr.Member as PropertyInfo;
+                configureEntity(Entity);
+                return this;
             }
-            return null;
+
+            public EntityBuilder<TRelated> AddRelated<TRelated>() where TRelated : class, new()
+            {
+                var relatedFaker = _dbContextBuilder.CreateFaker<TRelated>();
+                var relatedEntity = relatedFaker.Generate();
+
+                _dbContextBuilder._context.Set<TRelated>().Add(relatedEntity);
+
+                EstablishRelationship(Entity, relatedEntity);
+
+                return new EntityBuilder<TRelated>(_dbContextBuilder, relatedEntity);
+            }
+
+            public EntityBuilder<TRelated> AddRelated<TRelated>(
+                Expression<Func<TEntity, object>> mainEntityKeySelector,
+                Expression<Func<TRelated, object>> relatedEntityKeySelector)
+                where TRelated : class, new()
+            {
+                var relatedFaker = _dbContextBuilder.CreateFaker<TRelated>();
+                var relatedEntity = relatedFaker.Generate();
+
+                _dbContextBuilder._context.Set<TRelated>().Add(relatedEntity);
+
+                var mainKeyProperty = GetPropertyInfo(mainEntityKeySelector);
+                var relatedKeyProperty = GetPropertyInfo(relatedEntityKeySelector);
+
+                var mainKeyValue = mainKeyProperty.GetValue(Entity);
+                relatedKeyProperty.SetValue(relatedEntity, mainKeyValue);
+
+                return new EntityBuilder<TRelated>(_dbContextBuilder, relatedEntity);
+            }
+
+            public EntityBuilder<TEntity> RelateWith<TRelated>(TRelated relatedEntity) where TRelated : class
+            {
+                EstablishRelationship(Entity, relatedEntity);
+                return this;
+            }
+
+            public EntityBuilder<TEntity> RelateWith<TRelated>(
+                TRelated relatedEntity,
+                Expression<Func<TEntity, object>> mainEntityKeySelector,
+                Expression<Func<TRelated, object>> relatedEntityKeySelector) where TRelated : class
+            {
+                var mainKeyProperty = GetPropertyInfo(mainEntityKeySelector);
+                var relatedKeyProperty = GetPropertyInfo(relatedEntityKeySelector);
+
+                var mainKeyValue = mainKeyProperty.GetValue(Entity);
+                relatedKeyProperty.SetValue(relatedEntity, mainKeyValue);
+
+                return this;
+            }
+
+            private void EstablishRelationship<TPrincipal, TDependent>(TPrincipal principalEntity, TDependent dependentEntity)
+                where TPrincipal : class
+                where TDependent : class
+            {
+                var principalType = _dbContextBuilder._context.Model.FindEntityType(typeof(TPrincipal));
+                var dependentType = _dbContextBuilder._context.Model.FindEntityType(typeof(TDependent));
+
+                var foreignKeys = dependentType.GetForeignKeys();
+
+                foreach (var fk in foreignKeys)
+                {
+                    if (fk.PrincipalEntityType == principalType)
+                    {
+                        var principalKey = fk.PrincipalKey.Properties.First();
+                        var dependentForeignKey = fk.Properties.First();
+
+                        var principalKeyValue = principalKey.PropertyInfo.GetValue(principalEntity);
+                        dependentForeignKey.PropertyInfo.SetValue(dependentEntity, principalKeyValue);
+
+                        break;
+                    }
+                }
+            }
+
+            private PropertyInfo GetPropertyInfo<TSource>(Expression<Func<TSource, object>> propertyLambda)
+            {
+                Type type = typeof(TSource);
+
+                MemberExpression member = propertyLambda.Body as MemberExpression;
+                if (member == null)
+                {
+                    UnaryExpression unary = propertyLambda.Body as UnaryExpression;
+                    if (unary != null && unary.NodeType == ExpressionType.Convert)
+                    {
+                        member = unary.Operand as MemberExpression;
+                    }
+                }
+
+                if (member == null)
+                    throw new ArgumentException($"Expression '{propertyLambda}' refers to a method, not a property.");
+
+                PropertyInfo propInfo = member.Member as PropertyInfo;
+                if (propInfo == null)
+                    throw new ArgumentException($"Expression '{propertyLambda}' refers to a field, not a property.");
+
+                if (type != propInfo.ReflectedType && !type.IsSubclassOf(propInfo.ReflectedType))
+                    throw new ArgumentException($"Expression '{propertyLambda}' refers to a property that is not from type {type}.");
+
+                return propInfo;
+            }
         }
     }
 }
