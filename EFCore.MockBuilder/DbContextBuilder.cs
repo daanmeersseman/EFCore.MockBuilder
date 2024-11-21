@@ -13,7 +13,7 @@ namespace EFCore.MockBuilder
     public class DbContextBuilder<TContext> where TContext : DbContext
     {
         private readonly TContext _context;
-        private readonly Dictionary<Type, object> _customGenerators = new Dictionary<Type, object>();
+        private readonly Dictionary<Type, object> _customGenerators = new();
 
         public DbContextBuilder(TContext context)
         {
@@ -22,22 +22,16 @@ namespace EFCore.MockBuilder
 
         public EntityBuilder<TEntity> Add<TEntity>() where TEntity : class, new()
         {
-            var faker = CreateFaker<TEntity>();
-            var entity = faker.Generate();
-
+            var entity = CreateFaker<TEntity>().Generate();
             _context.Set<TEntity>().Add(entity);
-
             return new EntityBuilder<TEntity>(this, entity);
         }
 
         public EntityBuilder<TEntity>[] Add<TEntity>(int count) where TEntity : class, new()
         {
-            var faker = CreateFaker<TEntity>();
-            var entities = faker.Generate(count);
-
+            var entities = CreateFaker<TEntity>().Generate(count);
             _context.Set<TEntity>().AddRange(entities);
-
-            return entities.Select(entity => new EntityBuilder<TEntity>(this, entity)).ToArray();
+            return entities.Select(e => new EntityBuilder<TEntity>(this, e)).ToArray();
         }
 
         public void ConfigureGenerator<TEntity>(Action<Faker<TEntity>> configure) where TEntity : class
@@ -64,7 +58,8 @@ namespace EFCore.MockBuilder
             }
 
             faker = new Faker<TEntity>().StrictMode(true);
-            var properties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            var properties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanWrite);
 
             void IgnoreProperty(string propertyName)
             {
@@ -76,11 +71,8 @@ namespace EFCore.MockBuilder
 
             foreach (var prop in properties)
             {
-                if (!prop.CanWrite)
-                    continue;
-
-                var propType = prop.PropertyType;
                 var propName = prop.Name;
+                var propType = prop.PropertyType;
                 var underlyingType = Nullable.GetUnderlyingType(propType) ?? propType;
 
                 if (IsNavigationProperty(prop))
@@ -89,133 +81,44 @@ namespace EFCore.MockBuilder
                     continue;
                 }
 
+                var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
+
                 if (underlyingType == typeof(string))
                 {
-                    faker.RuleFor(propName, f => f.Lorem.Word());
-
-                    var isRequired = prop.GetCustomAttribute<RequiredAttribute>() != null;
-
                     var maxLength = prop.GetCustomAttribute<MaxLengthAttribute>()?.Length
                         ?? prop.GetCustomAttribute<StringLengthAttribute>()?.MaximumLength;
-
                     var minLength = prop.GetCustomAttribute<MinLengthAttribute>()?.Length
                         ?? prop.GetCustomAttribute<StringLengthAttribute>()?.MinimumLength;
-
-                    if (maxLength.HasValue && minLength.HasValue)
-                    {
-                        faker.RuleFor(propName, f => f.Random.String2(minLength.Value, maxLength.Value));
-                    }
-                    else if (maxLength.HasValue)
-                    {
-                        faker.RuleFor(propName, f => f.Random.String2(1, maxLength.Value));
-                    }
-                    else if (minLength.HasValue)
-                    {
-                        faker.RuleFor(propName, f => f.Random.String2(minLength.Value, minLength.Value + 10));
-                    }
 
                     if (prop.GetCustomAttribute<EmailAddressAttribute>() != null)
                     {
                         faker.RuleFor(propName, f => f.Internet.Email());
                     }
-
-                    if (prop.GetCustomAttribute<UrlAttribute>() != null)
+                    else if (prop.GetCustomAttribute<UrlAttribute>() != null)
                     {
                         faker.RuleFor(propName, f => f.Internet.Url());
                     }
-
-                    if (prop.GetCustomAttribute<PhoneAttribute>() != null)
+                    else if (prop.GetCustomAttribute<PhoneAttribute>() != null)
                     {
                         faker.RuleFor(propName, f => f.Phone.PhoneNumber());
                     }
-                }
-                else if (underlyingType == typeof(int))
-                {
-                    faker.RuleFor(propName, f => f.Random.Int());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
+                    else
                     {
-                        var min = Convert.ToInt32(rangeAttr.Minimum);
-                        var max = Convert.ToInt32(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Int(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(double))
-                {
-                    faker.RuleFor(propName, f => f.Random.Double());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToDouble(rangeAttr.Minimum);
-                        var max = Convert.ToDouble(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Double(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(decimal))
-                {
-                    faker.RuleFor(propName, f => f.Random.Decimal());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToDecimal(rangeAttr.Minimum);
-                        var max = Convert.ToDecimal(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Decimal(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(float))
-                {
-                    faker.RuleFor(propName, f => f.Random.Float());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToSingle(rangeAttr.Minimum);
-                        var max = Convert.ToSingle(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Float(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(long))
-                {
-                    faker.RuleFor(propName, f => f.Random.Long());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToInt64(rangeAttr.Minimum);
-                        var max = Convert.ToInt64(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Long(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(short))
-                {
-                    faker.RuleFor(propName, f => (short)f.Random.Int(short.MinValue, short.MaxValue));
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToInt16(rangeAttr.Minimum);
-                        var max = Convert.ToInt16(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => (short)f.Random.Int(min, max));
-                    }
-                }
-                else if (underlyingType == typeof(byte))
-                {
-                    faker.RuleFor(propName, f => f.Random.Byte());
-
-                    var rangeAttr = prop.GetCustomAttribute<RangeAttribute>();
-                    if (rangeAttr != null)
-                    {
-                        var min = Convert.ToByte(rangeAttr.Minimum);
-                        var max = Convert.ToByte(rangeAttr.Maximum);
-                        faker.RuleFor(propName, f => f.Random.Byte(min, max));
+                        faker.RuleFor(propName, f => f.Random.String2(minLength ?? 1, maxLength ?? 20));
                     }
                 }
                 else if (underlyingType == typeof(bool))
                 {
                     faker.RuleFor(propName, f => f.Random.Bool());
+                }
+                else if (underlyingType.IsEnum)
+                {
+                    faker.RuleFor(propName, f => Enum.GetValues(underlyingType)
+                        .GetValue(f.Random.Int(0, Enum.GetValues(underlyingType).Length - 1)));
+                }
+                else if (underlyingType == typeof(Guid))
+                {
+                    faker.RuleFor(propName, f => f.Random.Guid());
                 }
                 else if (underlyingType == typeof(DateTime))
                 {
@@ -227,20 +130,102 @@ namespace EFCore.MockBuilder
                 }
                 else if (underlyingType == typeof(TimeSpan))
                 {
-                    faker.RuleFor(propName, f => TimeSpan.FromMinutes(f.Random.Int(0, 1440)));
-                }
-                else if (underlyingType == typeof(Guid))
-                {
-                    faker.RuleFor(propName, f => f.Random.Guid());
-                }
-                else if (underlyingType.IsEnum)
-                {
-                    faker.RuleFor(propName, f => Enum.GetValues(underlyingType)
-                        .GetValue(f.Random.Int(0, Enum.GetValues(underlyingType).Length - 1)));
+                    faker.RuleFor(propName, f => f.Date.Timespan());
                 }
                 else if (underlyingType == typeof(byte[]))
                 {
-                    faker.RuleFor(propName, f => f.Random.Bytes(f.Random.Int(5, 20)));
+                    faker.RuleFor(propName, f => f.Random.Bytes(f.Random.Int(1, 100)));
+                }
+                else if (underlyingType == typeof(byte))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToByte(rangeAttr.Minimum);
+                        var max = Convert.ToByte(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Byte(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Byte());
+                    }
+                }
+                else if (underlyingType == typeof(short))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt16(rangeAttr.Minimum);
+                        var max = Convert.ToInt16(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Short(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Short());
+                    }
+                }
+                else if (underlyingType == typeof(int))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt32(rangeAttr.Minimum);
+                        var max = Convert.ToInt32(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Int(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Int());
+                    }
+                }
+                else if (underlyingType == typeof(long))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToInt64(rangeAttr.Minimum);
+                        var max = Convert.ToInt64(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Long(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Long());
+                    }
+                }
+                else if (underlyingType == typeof(float))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToSingle(rangeAttr.Minimum);
+                        var max = Convert.ToSingle(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Float(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Float());
+                    }
+                }
+                else if (underlyingType == typeof(double))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToDouble(rangeAttr.Minimum);
+                        var max = Convert.ToDouble(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Double(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Double());
+                    }
+                }
+                else if (underlyingType == typeof(decimal))
+                {
+                    if (rangeAttr != null)
+                    {
+                        var min = Convert.ToDecimal(rangeAttr.Minimum);
+                        var max = Convert.ToDecimal(rangeAttr.Maximum);
+                        faker.RuleFor(propName, f => f.Random.Decimal(min, max));
+                    }
+                    else
+                    {
+                        faker.RuleFor(propName, f => f.Random.Decimal());
+                    }
                 }
                 else
                 {
@@ -258,7 +243,7 @@ namespace EFCore.MockBuilder
 
             if (typeof(IEnumerable).IsAssignableFrom(underlyingType) && underlyingType != typeof(string))
             {
-                if (!underlyingType.IsArray && underlyingType != typeof(byte[]) && underlyingType != typeof(string))
+                if (!underlyingType.IsArray && underlyingType != typeof(byte[]))
                 {
                     return true;
                 }
@@ -277,19 +262,16 @@ namespace EFCore.MockBuilder
 
         private bool IsSimpleType(Type type)
         {
-            return
-                type.IsPrimitive ||
-                type.IsEnum ||
-                new Type[]
-                {
-                    typeof(string),
-                    typeof(decimal),
-                    typeof(DateTime),
-                    typeof(DateTimeOffset),
-                    typeof(TimeSpan),
-                    typeof(Guid),
-                    typeof(byte[])
-                }.Contains(type);
+            return type.IsPrimitive || type.IsEnum || new Type[]
+            {
+                typeof(string),
+                typeof(decimal),
+                typeof(DateTime),
+                typeof(DateTimeOffset),
+                typeof(TimeSpan),
+                typeof(Guid),
+                typeof(byte[])
+            }.Contains(type);
         }
 
         public class EntityBuilder<TEntity> where TEntity : class
@@ -311,13 +293,9 @@ namespace EFCore.MockBuilder
 
             public EntityBuilder<TRelated> AddRelated<TRelated>() where TRelated : class, new()
             {
-                var relatedFaker = _dbContextBuilder.CreateFaker<TRelated>();
-                var relatedEntity = relatedFaker.Generate();
-
+                var relatedEntity = _dbContextBuilder.CreateFaker<TRelated>().Generate();
                 _dbContextBuilder._context.Set<TRelated>().Add(relatedEntity);
-
                 EstablishRelationship(Entity, relatedEntity);
-
                 return new EntityBuilder<TRelated>(_dbContextBuilder, relatedEntity);
             }
 
@@ -326,9 +304,7 @@ namespace EFCore.MockBuilder
                 Expression<Func<TRelated, object>> relatedEntityKeySelector)
                 where TRelated : class, new()
             {
-                var relatedFaker = _dbContextBuilder.CreateFaker<TRelated>();
-                var relatedEntity = relatedFaker.Generate();
-
+                var relatedEntity = _dbContextBuilder.CreateFaker<TRelated>().Generate();
                 _dbContextBuilder._context.Set<TRelated>().Add(relatedEntity);
 
                 var mainKeyProperty = GetPropertyInfo(mainEntityKeySelector);
@@ -386,7 +362,7 @@ namespace EFCore.MockBuilder
 
             private PropertyInfo GetPropertyInfo<TSource>(Expression<Func<TSource, object>> propertyLambda)
             {
-                Type type = typeof(TSource);
+                var type = typeof(TSource);
 
                 MemberExpression member = propertyLambda.Body as MemberExpression;
                 if (member == null)
@@ -401,12 +377,9 @@ namespace EFCore.MockBuilder
                 if (member == null)
                     throw new ArgumentException($"Expression '{propertyLambda}' refers to a method, not a property.");
 
-                PropertyInfo propInfo = member.Member as PropertyInfo;
+                var propInfo = member.Member as PropertyInfo;
                 if (propInfo == null)
                     throw new ArgumentException($"Expression '{propertyLambda}' refers to a field, not a property.");
-
-                if (type != propInfo.ReflectedType && !type.IsSubclassOf(propInfo.ReflectedType))
-                    throw new ArgumentException($"Expression '{propertyLambda}' refers to a property that is not from type {type}.");
 
                 return propInfo;
             }
