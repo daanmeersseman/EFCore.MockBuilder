@@ -8,7 +8,11 @@
 		<Authors>Daan Meersseman</Authors>
 		<PackageTags>EntityFrameworkCore;UnitTesting;DbContext;Mocking</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/daanmeersseman/EFCore.MockBuilder</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/daanmeersseman/EFCore.MockBuilder/</RepositoryUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<PropertyGroup>
