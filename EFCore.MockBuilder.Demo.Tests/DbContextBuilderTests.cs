@@ -42,7 +42,7 @@ public class DbContextBuilderTests
             .With(e => e.EnrollmentDate = DateTime.Today.AddDays(-10))
             .RelateWith(courseY.Entity);
 
-        dbContextBuilder.Build();  // Save all entities and relationships
+        dbContextBuilder.Build();  
 
         // Assert
         var students = dbContext.Students.Include(s => s.Enrollments).ToList();
@@ -51,12 +51,12 @@ public class DbContextBuilderTests
         Assert.Equal(2, students.Count);
         Assert.Equal("Alice Johnson", students[0].Name);
         Assert.Equal("Bob Smith", students[1].Name);
-        Assert.Equal(5, retrievedCourses.Count); // Three courses generated
+        Assert.Equal(5, retrievedCourses.Count); 
 
         // Check the enrollments and relationships
-        Assert.Equal(2, students[0].Enrollments.Count); // Alice has 2 enrollments
-        Assert.Single(students[1].Enrollments); // Bob has 1 enrollment
+        Assert.Equal(2, students[0].Enrollments.Count); 
+        Assert.Single(students[1].Enrollments); 
         Assert.Contains(students[0].Enrollments, e => e.CourseId == retrievedCourses[3].Id);
-        Assert.Contains(students[0].Enrollments, e => e.CourseId == retrievedCourses[4].Id);
+        Assert.Contains(students[1].Enrollments, e => e.CourseId == retrievedCourses[4].Id);
     }
 }

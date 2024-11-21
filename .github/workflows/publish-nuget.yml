@@ -12,6 +12,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/execute@v0
+      id: gitversion
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -24,21 +28,10 @@ jobs:
       run: dotnet restore EFCore.MockBuilder/EFCore.MockBuilder.csproj
 
     - name: Build
-      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release
+      run: dotnet build EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:Version=${{ steps.gitversion.outputs.SemVer }}
 
     - name: Pack NuGet Package
-      run: |
-        if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-          dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj \
-            --configuration Release \
-            --no-build \
-            /p:PackageVersion=${{ github.event.release.tag_name }}-beta
-        else
-          dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj \
-            --configuration Release \
-            --no-build \
-            /p:PackageVersion=${{ github.event.release.tag_name }}
-        fi
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release /p:Version=${{ steps.gitversion.outputs.SemVer }}
 
     - name: List Packed Files
       run: ls EFCore.MockBuilder/bin/Release/
