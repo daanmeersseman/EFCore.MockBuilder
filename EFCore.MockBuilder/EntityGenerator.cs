@@ -178,7 +178,7 @@ public static class EntityGenerator
         if (type == typeof(double))
             return faker.Random.Double(min, max);
         if (type == typeof(decimal))
-            return (decimal)faker.Random.Decimal((decimal)min, (decimal)max);
+            return faker.Random.Decimal((decimal)min, (decimal)max);
         if (type == typeof(short))
             return (short)faker.Random.Int((short)min, (short)max);
         if (type == typeof(byte))
