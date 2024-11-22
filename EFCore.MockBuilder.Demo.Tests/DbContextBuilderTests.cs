@@ -317,7 +317,7 @@ namespace EFCore.MockBuilder.Demo.Tests
             var builder = new DbContextBuilder<DbContext>(context);
 
             // Act
-         var x=    builder.Add<AllDataTypesEntity>(1); // Adds one entity with dummy data
+            var x = builder.Add<AllDataTypesEntity>(1); // Adds one entity with dummy data
             var dbContext = builder.Build();
 
             // Assert
