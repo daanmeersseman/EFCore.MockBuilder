@@ -1,10 +1,8 @@
 name: Publish NuGet Package
-
 on:
   push:
     tags:
       - 'v*'
-
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -34,7 +32,7 @@ jobs:
       run: dotnet test --no-restore --verbosity normal
     
     - name: Pack
-      run: dotnet pack --configuration Release --no-build --output nupkgs /p:Version=${PACKAGE_VERSION}
+      run: dotnet pack EFCore.MockBuilder/EFCore.MockBuilder.csproj --configuration Release --no-build --output nupkgs /p:Version=${PACKAGE_VERSION}
     
     - name: Push to NuGet
       run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
