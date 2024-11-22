@@ -15,6 +15,7 @@
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<PackageIcon>Assets/icon.png</PackageIcon>
+                <Icon>Assets/icon.png</Icon>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -29,7 +30,7 @@
 
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
-		<None Include="Assets/icon.png" Pack="true" PackagePath="\" />
+		<None Include="Assets/icon.png" Pack="true" PackagePath="Assets/" />
 	</ItemGroup>
 
 </Project>
