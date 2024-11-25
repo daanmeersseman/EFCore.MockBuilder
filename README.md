@@ -1,4 +1,7 @@
-![EFCore.MockBuilder Icon](EFCore.MockBuilder/Assets/icon.png)
+<p align="center">
+  <img src="EFCore.MockBuilder/Assets/icon.png" alt="EFCore.Mockbuilder Icon" width="150" />
+</p>
+
 # EFCore.MockBuilder
 
 A fluent API to easily build mocked `DbContext` instances for unit testing in EF Core. This package has the ability to automatically set up relations between tables based on the dbcontext configuration. Relations can also be manually set in a fluent way.
