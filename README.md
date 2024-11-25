@@ -1,6 +1,15 @@
 # EFCore.MockBuilder
 
-A fluent API to easily build mocked `DbContext` instances with entities and relationships for unit testing in Entity Framework Core (EF Core).
+A fluent API to easily build mocked `DbContext` instances for unit testing in EF Core. This package has the ability to automatically set up relations between tables based on the dbcontext configuration. Relations can also be manually set in a fluent way.
+
+---
+
+## Features
+
+- **Fluent API** for setting up `DbContext` with entities and relationships.
+- **Automatic Entity Generation** that takes data annotations into account like `[MaxLength]`, `[Range]`, `[Required]`.
+- **Customize entities** and override automatically mocked properties properties.
+- **Automatic and Manual Relationship Establishment** between entities.
 
 ---
 
@@ -18,15 +27,6 @@ A fluent API to easily build mocked `DbContext` instances with entities and rela
     - [Relating with Existing Entities](#relating-with-existing-entities)
 - [License](#license)
 - [Contributing](#contributing)
-
----
-
-## Features
-
-- **Fluent API** for setting up `DbContext` with entities and relationships.
-- **Automatic Entity Generation** that respects data annotations like `[MaxLength]`, `[Range]`, `[Required]`.
-- **Entity Customization** to override specific properties.
-- **Automatic and Manual Relationship Establishment** between entities.
 
 ---
 
@@ -54,7 +54,7 @@ Initialize the `DbContextBuilder` with your EF Core `DbContext`:
 using EFCore.MockBuilder;
 using Microsoft.EntityFrameworkCore;
 
-// Create an in-memory DbContext for testing
+// Create some dbContext
 var options = new DbContextOptionsBuilder<DbContext>()
     .UseInMemoryDatabase("TestDatabase")
     .Options;
@@ -137,6 +137,6 @@ EFCore.MockBuilder is licensed under the [MIT License](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit issues or pull requests for new features, bug fixes, or improvements.
+Contributions and change requests are welcome! Feel free to submit issues or pull requests for new features, bug fixes, or improvements.
 
 ---
