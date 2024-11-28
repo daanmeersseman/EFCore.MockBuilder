@@ -11,7 +11,7 @@ A fluent API to easily build mocked `DbContext` instances for unit testing in EF
 ## Features
 
 - **Fluent API** for setting up `DbContext` with entities and relationships.
-- **Automatic Entity Generation** that takes data annotations into account like `[MaxLength]`, `[Range]`, `[Required]`.
+- **Automatic Entity Generation**: Generated entities contain dummy data by default. All generated dummy data takes data annotations into account like `[MaxLength]`, `[Range]`, `[Required]`.
 - **Customize entities** and override automatically mocked properties properties.
 - **Automatic and Manual Relationship Establishment** between entities.
 
