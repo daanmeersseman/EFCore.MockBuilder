@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="EFCore.MockBuilder/Assets/icon.png" alt="EFCore.Mockbuilder Icon" width="150" />
+  <img src="EFCore.MockBuilder/Assets/icon.png" alt="EFCore.Mockbuilder Icon" width="120" />
 </p>
 
 # EFCore.MockBuilder
