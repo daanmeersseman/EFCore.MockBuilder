@@ -28,5 +28,10 @@ namespace EFCore.MockBuilder.Demo
 
             base.OnModelCreating(modelBuilder);
         }
+
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder.Properties<ValueObject>().HaveConversion<ValueObjectConverter>();
+        }
     }
 }
